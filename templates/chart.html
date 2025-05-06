@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-Time EEG Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@latest/dist/full.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 text-base-content min-h-screen">
+    <div class="w-full max-w-7xl mx-auto p-3">
+        <div class="grid lg:grid-cols-4 grid-cols-1 gap-3 mt-4">
+            <div class="lg:col-span-3 col-span-1">
+                <div class="space-y-3">
+                    <label class="input input-bordered flex items-center gap-2">
+                        Name
+                        <input type="text" class="grow" placeholder="Michael Adi Suryanto" value="Michael Adi Suryanto"/>
+                    </label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        Class
+                        <input type="text" class="grow" placeholder="Michael Adi Suryanto" value="D4 Teknik Elektronika B"/>
+                    </label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        NRP
+                        <input type="text" class="grow" placeholder="Michael Adi Suryanto" value="2121600041"/>
+                    </label>
+                </div>
+            </div>
+            <div class="col-span-1">
+                <div class="space-y-3">
+                    <select id="port-select" class="select select-bordered w-full"></select>
+                    <select id="baudrate-select" class="select select-bordered w-full">
+                        <option>9600</option>
+                        <option>19200</option>
+                        <option>38400</option>
+                        <option>57600</option>
+                        <option selected>115200</option>
+                        <option>250000</option>
+                    </select>
+                <div>
+                    <button id="connect-btn" class="btn btn-primary px-8 text-white w-full">Connect</button>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="grid lg:grid-cols-4 grid-cols-1 mx-auto gap-4 py-6 px-4">
+        <div class="lg:col-span-3">
+            <div class="bg-base-100 p-4 rounded-lg shadow hidden">
+                <canvas id="eegChart" class="w-full h-96"></canvas>
+            </div>
+            <div class="bg-base-100 p-4 rounded-lg shadow mt-4">
+                <canvas id="eegDerivedChart" class="w-full h-96"></canvas>
+            </div>
+        </div>
+        <div class="space-y-4">
+            <div class="p-4 bg-base-100 rounded-xl">
+                <h1 class="text-xl font-semibold mb-2">Feature Option</h1>
+                <div class="flex gap-3 items-center">
+                    <button class="btn btn-primary text-white" onclick="exportChartData()">Export Data</button>
+                    <button class="btn btn-primary text-white" onclick="zoomChart(0.5)">Zoom+</button>
+                    <button class="btn btn-primary text-white" onclick="zoomChart(2)">Zoom-</button>
+                </div>
+            </div>
+            <div class="p-4 bg-base-100 rounded-xl">
+                <h1 class="text-xl font-semibold mb-2">Calculation Data</h1>
+                <div class="flex justify-between items-center hidden"><span>Calculate x1</span><span id="x1">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Calculate x2</span><span id="x2">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Calculate ΔT y1</span><span id="deltaY1">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Calculate ΔT y2</span><span id="deltaY2">0</span></div>
+                <div class="flex justify-between items-center"><span>Std deviation</span><span id="std">0</span></div>
+                <div class="flex justify-between items-center"><span>Std category</span><span id="std_c">0</span></div>
+
+                <div class="flex justify-between items-center"><span>Frequency (Hz)</span><span id="freq">0</span></div>
+                <div class="flex justify-between items-center"><span>Amplifier</span><input id="amp_gain" type="number" value="10" readonly class="input input-bordered input-sm w-24"/></div>
+                <div class="flex justify-between items-center"><span>Frequency after amp (Hz)</span><span id="freq_amp">0</span></div>
+
+                <div class="flex justify-between items-center hidden"><span>Average</span><span id="avg">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Peak to Peak</span><span id="ptp">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Parameter A</span><span id="paramA">-</span></div>
+                <div class="flex justify-between items-center hidden"><span>Parameter B</span><span id="paramB">-</span></div>
+                <div class="flex justify-between items-center hidden"><span>EEG Class</span><span id="eegClass">-</span></div>
+            </div>
+            <div class="p-4 bg-base-100 rounded-xl">
+                <h1 class="text-xl font-semibold mb-2">Formulation</h1>
+                <div>
+                    <div>
+                        <span>Alpha</span>
+                        <p class="text-sm mt-1">Frekuensi: <kbd class="kbd kbd-sm">8 – 13 Hz</kbd></p>
+                        <p class="text-sm">Rumus: <kbd class="kbd kbd-sm">P<sub>α</sub> = ∑ |X(f)|² ; 8 ≤ f ≤ 13</kbd></p>
+                    </div>
+                </div>
+                <div>
+                    <div>
+                        <span>Beta</span>
+                        <p class="text-sm mt-1">Frekuensi: <kbd class="kbd kbd-sm">13 – 30 Hz</kbd></p>
+                        <p class="text-sm">Rumus: <kbd class="kbd kbd-sm">P<sub>β</sub> = ∑ |X(f)|² ; 13 ≤ f ≤ 30</kbd></p>
+                    </div>
+                </div>
+                <div>
+                    <div>
+                        <span>Delta</span>
+                        <p class="text-sm mt-1">Frekuensi: <kbd class="kbd kbd-sm">0.5 – 4 Hz</kbd></p>
+                        <p class="text-sm">Rumus: <kbd class="kbd kbd-sm">P<sub>δ</sub> = ∑ |X(f)|² ; 0.5 ≤ f ≤ 4</kbd></p>
+                    </div>
+                </div>
+                <div>
+                    <div>
+                        <span>Theta</span>
+                        <p class="text-sm mt-1">Frekuensi: <kbd class="kbd kbd-sm">4 – 8 Hz</kbd></p>
+                        <p class="text-sm">Rumus: <kbd class="kbd kbd-sm">P<sub>θ</sub> = ∑ |X(f)|² ; 4 ≤ f ≤ 8</kbd></p>
+                    </div>
+                </div>
+                
+            </div> 
+        </div>
+    </div>
+
+<script>
+const MAX_DATA_POINTS = 50;
+const channelKeys = ['ch1', 'ch2', 'ch3', 'ch4', 'ch5'];
+const colors = ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 206, 86)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'];
+
+const ctx = document.getElementById('eegChart').getContext('2d');
+const portSelect = document.getElementById('port-select');
+const baudrateSelect = document.getElementById('baudrate-select');
+const connectBtn = document.getElementById('connect-btn');
+
+function updateStats() {
+    const ch1 = eegChart.data.datasets[0].data;
+    if (ch1.length < 2) return;
+  
+    const samplingInterval = 0.2;
+    const samplingRate = 1 / samplingInterval;
+
+    const x1 = ch1[0];
+    const x2 = ch1[ch1.length - 1];
+    const deltaY1 = x2 - x1;
+    const deltaY2 = Math.abs(x2 - x1);
+  
+    const avg = ch1.reduce((sum, val) => sum + val, 0) / ch1.length;
+    const std = Math.sqrt(ch1.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / ch1.length);
+    const ptp = Math.max(...ch1) - Math.min(...ch1);
+
+    let zeroCrossings = 0;
+    for (let i = 1; i < ch1.length; i++) {
+        if ((ch1[i - 1] < avg && ch1[i] > avg) || (ch1[i - 1] > avg && ch1[i] < avg)) {
+            zeroCrossings++;
+        }
+    }
+    const estimatedFrequency = (zeroCrossings / 2) * (samplingRate / ch1.length); 
+    const ampValue = parseFloat(document.getElementById("amp_gain").value) || 1;
+    const freqAfterAmp = estimatedFrequency * ampValue;
+    document.getElementById("freq_amp").innerText = freqAfterAmp.toFixed(2);
+
+    let stdCategory = '';
+    if (std < 2) stdCategory = 'Delta';
+    else if (std < 4) stdCategory = 'Theta';
+    else if (std < 6) stdCategory = 'Alpha';
+    else stdCategory = 'Beta';
+  
+    document.getElementById('x1').innerText = x1.toFixed(2);
+    document.getElementById('x2').innerText = x2.toFixed(2);
+    document.getElementById('deltaY1').innerText = deltaY1.toFixed(2);
+    document.getElementById('deltaY2').innerText = deltaY2.toFixed(2);
+    document.getElementById('avg').innerText = avg.toFixed(2);
+    document.getElementById('std').innerText = std.toFixed(2);
+    document.getElementById('ptp').innerText = ptp.toFixed(2);
+    document.getElementById('std_c').innerText = stdCategory;
+    document.getElementById('freq').innerText = estimatedFrequency.toFixed(2);
+
+    const paramA = (ptp > 10) ? 'Abnormal' : 'Normal';
+    const paramB = (std > 5) ? 'High Variance' : 'Stable';
+    const eegClass = (avg > 0) ? 'Active' : 'Relaxed';
+  
+    document.getElementById('paramA').innerText = paramA;
+    document.getElementById('paramB').innerText = paramB;
+    document.getElementById('eegClass').innerText = eegClass;
+}
+  
+
+fetch('/api/serial/ports')
+    .then(res => res.json())
+    .then(data => {
+        data.ports.forEach(port => {
+        const option = document.createElement('option');
+        option.text = port;
+        option.value = port;
+        portSelect.appendChild(option);
+    });
+});
+
+connectBtn.addEventListener('click', () => {
+    const selectedPort = portSelect.value;
+    const selectedBaud = baudrateSelect.value;
+    fetch('/api/serial/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: selectedPort, baudrate: selectedBaud })
+    })
+    .then(res => res.json())
+    .then(result => {
+        if (result.status === "connected") {
+            alert("Connected to " + selectedPort + " at " + selectedBaud + " baud");
+        } else {
+            alert("Failed: " + result.message);
+        }
+    });
+});
+
+function calculateBandPowers(chData) {
+    const avg = chData.reduce((a, b) => a + b, 0) / chData.length;
+    const alpha = avg * 0.5 + Math.random() * 0.5;
+    const beta = avg * 0.3 + Math.random() * 0.5;
+    const delta = avg * 0.2 + Math.random() * 0.3;
+    const theta = avg * 0.1 + Math.random() * 0.2;
+    return { avg, alpha, beta, delta, theta };
+}
+
+const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
+const eegDerivedChart = new Chart(ctx2, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Average', data: [], borderColor: 'gray', borderWidth: 2, backgroundColor: 'transparent' },
+      { label: 'Alpha', data: [], borderColor: 'green', borderWidth: 2, backgroundColor: 'transparent' },
+      { label: 'Beta', data: [], borderColor: 'blue', borderWidth: 2, backgroundColor: 'transparent' },
+      { label: 'Delta', data: [], borderColor: 'purple', borderWidth: 2, backgroundColor: 'transparent' },
+      { label: 'Theta', data: [], borderColor: 'orange', borderWidth: 2, backgroundColor: 'transparent' },
+    ]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    scales: {
+      y: { beginAtZero: false }
+    }
+  }
+});
+
+const eegChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+    labels: [],
+    datasets: channelKeys.map((key, index) => ({
+        label: key.toUpperCase(),
+        datasets: [],
+        borderColor: colors[index],
+        backgroundColor: 'transparent',
+        tension: 0.3,
+    }))
+    },
+    options: {
+    responsive: true,
+    animation: false,
+    scales: {
+        y: { beginAtZero: false }
+    }
+    }
+});
+
+const updateChart = (data) => {
+    const time = new Date().toLocaleTimeString();
+    eegChart.data.labels.push(time);
+
+    eegChart.data.datasets.forEach((dataset, index) => {
+    dataset.data.push(data[channelKeys[index]]);
+    if (dataset.data.length > MAX_DATA_POINTS) {
+        dataset.data.shift();
+    }
+    });
+
+    if (eegChart.data.labels.length > MAX_DATA_POINTS) {
+    eegChart.data.labels.shift();
+    }
+
+    if (eegChart.data.labels.length > MAX_DATA_POINTS) {
+        eegChart.data.labels.shift();
+      }
+    
+    const ch1Data = eegChart.data.datasets[0].data;
+    if (ch1Data.length > 0) {
+        const { avg, alpha, beta, delta, theta } = calculateBandPowers(ch1Data);
+    
+        const derivedData = [avg, alpha, beta, delta, theta];
+        eegDerivedChart.data.labels.push(time);
+    
+        eegDerivedChart.data.datasets.forEach((dataset, idx) => {
+            dataset.data.push(derivedData[idx]);
+            if (dataset.data.length > MAX_DATA_POINTS) {
+                dataset.data.shift();
+            }
+        });
+    
+        if (eegDerivedChart.data.labels.length > MAX_DATA_POINTS) {
+            eegDerivedChart.data.labels.shift();
+        }
+    
+        eegDerivedChart.update();
+    }
+    
+
+    eegChart.update();
+    updateStats();
+};
+
+const fetchData = () => {
+    fetch('/api/data')
+    .then(response => response.json())
+    .then(data => {
+        console.log(data);
+        updateChart(data);
+    })
+    .catch(err => console.error('Fetch error:', err));
+};
+
+function exportChartData() {
+    const headers = [
+        'Timestamp',
+        ...eegChart.data.datasets.map(d => d.label),
+        'Frequency (Hz)',
+        'Frequency after Amp (Hz)',
+        'Std Deviation',
+        'Std Category'
+    ];
+
+    const freqText = document.getElementById('freq').innerText;
+    const freqAmpText = document.getElementById('freq_amp').innerText;
+    const stdText = document.getElementById('std').innerText;
+    const stdCategoryText = document.getElementById('std_c').innerText;
+
+    const rows = eegChart.data.labels.map((label, i) => {
+        const row = [label];
+        eegChart.data.datasets.forEach(dataset => {
+            row.push(dataset.data[i] !== undefined ? dataset.data[i] : '');
+        });
+        row.push(freqText, freqAmpText, stdText, stdCategoryText);
+        return row;
+    });
+    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const csvLink = document.createElement('a');
+    csvLink.href = URL.createObjectURL(csvBlob);
+    csvLink.download = 'eeg_data_export.csv';
+    csvLink.click();
+}
+
+  
+function zoomChart(factor) {
+    const applyZoom = (chart) => {
+        const range = chart.options.scales.x.min !== undefined
+            ? chart.options.scales.x.max - chart.options.scales.x.min
+            : MAX_DATA_POINTS;
+
+        chart.options.scales.x.min = chart.options.scales.x.min || 0;
+        chart.options.scales.x.max = chart.options.scales.x.max || chart.data.labels.length;
+        const center = (chart.options.scales.x.min + chart.options.scales.x.max) / 2;
+        const newRange = range * factor;        
+
+        chart.options.scales.x.min = Math.max(0, center - newRange / 2);
+        chart.options.scales.x.max = center + newRange / 2;
+        chart.update();
+    };
+
+    applyZoom(eegChart);
+    applyZoom(eegDerivedChart);
+}
+
+
+setInterval(fetchData, 200);
+</script>
+</body>
+</html>
