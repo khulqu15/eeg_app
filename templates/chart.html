@@ -57,7 +57,8 @@
         <div class="space-y-4">
             <div class="p-4 bg-base-100 rounded-xl">
                 <h1 class="text-xl font-semibold mb-2">Feature Option</h1>
-                <div class="flex gap-3 items-center">
+                <div class="flex gap-3 items-center flex-wrap">
+                    <button class="btn btn-primary text-white" onclick="my_modal_4.showModal()">Sampling</button>
                     <button class="btn btn-primary text-white" onclick="exportChartData()">Export Data</button>
                     <button class="btn btn-primary text-white" onclick="zoomChart(0.5)">Zoom+</button>
                     <button class="btn btn-primary text-white" onclick="zoomChart(2)">Zoom-</button>
@@ -115,17 +116,44 @@
                 
             </div> 
         </div>
+        <dialog id="my_modal_4" class="modal">
+            <div class="modal-box w-11/12 max-w-5xl">
+                <h3 class="text-lg font-bold">Sampling Signal</h3>
+                <div class="mt-4">
+                    <canvas id="samplingChart" class="w-full h-64"></canvas>
+                </div>
+                <div class="mt-4 space-y-2">
+                    <div class="flex justify-between"><span>Total Sample Points:</span><span id="samplingPoints">0</span></div>
+                    <div class="flex justify-between"><span>Estimated Frequency (Hz):</span><span id="samplingFreq">0</span></div>
+                </div>
+                <div class="modal-action">
+                <form method="dialog">
+                    <button class="btn">OK!</button>
+                </form>
+                </div>
+            </div>
+        </dialog>
     </div>
 
 <script>
 const MAX_DATA_POINTS = 50;
-const channelKeys = ['ch1', 'ch2', 'ch3', 'ch4', 'ch5'];
+const channelKeys = ['ch1', 'ch2', 'ch3', 'ch4'];
 const colors = ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 206, 86)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'];
 
 const ctx = document.getElementById('eegChart').getContext('2d');
 const portSelect = document.getElementById('port-select');
 const baudrateSelect = document.getElementById('baudrate-select');
 const connectBtn = document.getElementById('connect-btn');
+let stdCategory = '';
+let freqAfterAmp = 0
+let std = 0
+let avg = 0
+let estimatedFrequency = 0
+
+const freqList = [];
+const freqAmpList = [];
+const stdList = [];
+const stdCategoryList = [];
 
 function updateStats() {
     const ch1 = eegChart.data.datasets[0].data;
@@ -139,8 +167,8 @@ function updateStats() {
     const deltaY1 = x2 - x1;
     const deltaY2 = Math.abs(x2 - x1);
   
-    const avg = ch1.reduce((sum, val) => sum + val, 0) / ch1.length;
-    const std = Math.sqrt(ch1.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / ch1.length);
+    avg = ch1.reduce((sum, val) => sum + val, 0) / ch1.length;
+    std = Math.sqrt(ch1.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / ch1.length);
     const ptp = Math.max(...ch1) - Math.min(...ch1);
 
     let zeroCrossings = 0;
@@ -149,12 +177,11 @@ function updateStats() {
             zeroCrossings++;
         }
     }
-    const estimatedFrequency = (zeroCrossings / 2) * (samplingRate / ch1.length); 
+    estimatedFrequency = (zeroCrossings / 2) * (samplingRate / ch1.length); 
     const ampValue = parseFloat(document.getElementById("amp_gain").value) || 1;
-    const freqAfterAmp = estimatedFrequency * ampValue;
+    freqAfterAmp = estimatedFrequency * ampValue;
     document.getElementById("freq_amp").innerText = freqAfterAmp.toFixed(2);
 
-    let stdCategory = '';
     if (std < 2) stdCategory = 'Delta';
     else if (std < 4) stdCategory = 'Theta';
     else if (std < 6) stdCategory = 'Alpha';
@@ -169,6 +196,11 @@ function updateStats() {
     document.getElementById('ptp').innerText = ptp.toFixed(2);
     document.getElementById('std_c').innerText = stdCategory;
     document.getElementById('freq').innerText = estimatedFrequency.toFixed(2);
+
+    freqList.push(estimatedFrequency.toFixed(2));
+    freqAmpList.push(freqAfterAmp.toFixed(2));
+    stdList.push(std.toFixed(2));
+    stdCategoryList.push(stdCategory);
 
     const paramA = (ptp > 10) ? 'Abnormal' : 'Normal';
     const paramB = (std > 5) ? 'High Variance' : 'Stable';
@@ -209,6 +241,54 @@ connectBtn.addEventListener('click', () => {
     });
 });
 
+const samplingCtx = document.getElementById('samplingChart').getContext('2d');
+const samplingChart = new Chart(samplingCtx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'CH1 Sample',
+            data: [],
+            borderColor: 'teal',
+            borderWidth: 2,
+            backgroundColor: 'transparent',
+            tension: 0.3
+        }]
+    },
+    options: {
+        responsive: true,
+        animation: false,
+        scales: {
+            y: { beginAtZero: false }
+        }
+    }
+});
+
+function updateSamplingChart() {
+    const ch1Data = eegChart.data.datasets[0].data;
+    const timeLabels = eegChart.data.labels;
+
+    samplingChart.data.labels = [...timeLabels];
+    samplingChart.data.datasets[0].data = [...ch1Data];
+
+    document.getElementById('samplingPoints').innerText = ch1Data.length;
+
+    const avg = ch1Data.reduce((a, b) => a + b, 0) / ch1Data.length;
+    let zeroCrossings = 0;
+    for (let i = 1; i < ch1Data.length; i++) {
+        if ((ch1Data[i - 1] < avg && ch1Data[i] > avg) || (ch1Data[i - 1] > avg && ch1Data[i] < avg)) {
+            zeroCrossings++;
+        }
+    }
+
+    const samplingInterval = 0.2; 
+    const samplingRate = 1 / samplingInterval;
+    const estimatedFreq = (zeroCrossings / 2) * (samplingRate / ch1Data.length);
+    document.getElementById('samplingFreq').innerText = estimatedFreq.toFixed(2);
+
+    samplingChart.update();
+}
+
 function calculateBandPowers(chData) {
     const avg = chData.reduce((a, b) => a + b, 0) / chData.length;
     const alpha = avg * 0.5 + Math.random() * 0.5;
@@ -217,6 +297,10 @@ function calculateBandPowers(chData) {
     const theta = avg * 0.1 + Math.random() * 0.2;
     return { avg, alpha, beta, delta, theta };
 }
+
+document.querySelector('[onclick="my_modal_4.showModal()"]').addEventListener('click', () => {
+    updateSamplingChart();
+});
 
 const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
 const eegDerivedChart = new Chart(ctx2, {
@@ -323,22 +407,38 @@ function exportChartData() {
         'Frequency (Hz)',
         'Frequency after Amp (Hz)',
         'Std Deviation',
-        'Std Category'
+        'Std Category',
+        'Alpha',
+        'Beta',
+        'Theta',
+        'Delta',
+        'Average',
     ];
-
-    const freqText = document.getElementById('freq').innerText;
-    const freqAmpText = document.getElementById('freq_amp').innerText;
-    const stdText = document.getElementById('std').innerText;
-    const stdCategoryText = document.getElementById('std_c').innerText;
 
     const rows = eegChart.data.labels.map((label, i) => {
         const row = [label];
+
+        // CH1 - CH4
         eegChart.data.datasets.forEach(dataset => {
             row.push(dataset.data[i] !== undefined ? dataset.data[i] : '');
         });
-        row.push(freqText, freqAmpText, stdText, stdCategoryText);
+
+        // Ambil historis
+        const alpha = eegDerivedChart.data.datasets[1].data[i] || 0;
+        const beta = eegDerivedChart.data.datasets[2].data[i] || 0;
+        const delta = eegDerivedChart.data.datasets[3].data[i] || 0;
+        const theta = eegDerivedChart.data.datasets[4].data[i] || 0;
+        const avg = eegDerivedChart.data.datasets[0].data[i] || 0;
+
+        const freq = freqList[i] || 0;
+        const freqAmp = freqAmpList[i] || 0;
+        const stdVal = stdList[i] || 0;
+        const stdCat = stdCategoryList[i] || '-';
+
+        row.push(freq, freqAmp, stdVal, stdCat, alpha.toFixed(2), beta.toFixed(2), theta.toFixed(2), delta.toFixed(2), avg.toFixed(2));
         return row;
     });
+
     const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
     const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const csvLink = document.createElement('a');
@@ -347,7 +447,6 @@ function exportChartData() {
     csvLink.click();
 }
 
-  
 function zoomChart(factor) {
     const applyZoom = (chart) => {
         const range = chart.options.scales.x.min !== undefined
