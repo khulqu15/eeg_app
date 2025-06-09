@@ -48,7 +48,7 @@
     </div>
     <div class="grid lg:grid-cols-4 grid-cols-1 mx-auto gap-4 py-6 px-4">
         <div class="lg:col-span-3">
-            <div class="bg-base-100 p-4 rounded-lg shadow hidden">
+            <div class="bg-base-100 p-4 rounded-lg shadow">
                 <canvas id="eegChart" class="w-full h-96"></canvas>
             </div>
             <div class="bg-base-100 p-4 rounded-lg shadow mt-4">
@@ -87,11 +87,12 @@
                 <div class="flex justify-between items-center"><span>EEG Class</span><span id="eegClass">-</span></div>
             </div>
             <select id="timeRangeSelect" class="select select-bordered w-full mt-2">
+                <option value="all" selected>All Time</option>
                 <option value="1s">Last 1 Second</option>
                 <option value="1m">Last 1 Minute</option>
                 <option value="1h">Last 1 Hour</option>
             </select>
-            <div class="p-4 bg-base-100 rounded-xl hidden">
+            <div class="p-4 bg-base-100 rounded-xl">
                 <h1 class="text-xl font-semibold mb-2">Formulation</h1>
                 <div>
                     <div>
@@ -146,6 +147,7 @@
         const MAX_DATA_POINTS = 300;
         const ctx = document.getElementById('eegChart').getContext('2d');
         const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
+        
         const eegSamples = {
             "Non-Stimulated EEG Signal (Healthy)": [
                 {
@@ -1756,7 +1758,6 @@
                 }
             ]
         };
-    
         let eegData = [];
         let freqList = [];
         let stdList = [];
@@ -1795,7 +1796,11 @@
             }
         });
 
-
+        const rawEEGFull = [];
+        const alphaFull = [];
+        const betaFull = [];
+        const thetaFull = [];
+        const deltaFull = [];
         document.getElementById('samplingPoints').innerText = "100";
         document.getElementById('samplingFreq').innerText = "50";
 
@@ -1804,8 +1809,9 @@
             data: {
                 datasets: [
                     {
-                        label: 'eeg Data',
+                        label: 'Raw EEG',
                         data: [],
+                        yAxisID: 'yRaw',
                         parsing: false,
                         borderColor: 'rgb(54, 162, 235)',
                         backgroundColor: 'transparent',
@@ -1814,34 +1820,48 @@
                         pointRadius: 0
                     },
                     {
-                        label: 'QRS Complex',
+                        label: 'Alpha',
                         data: [],
-                        parsing: false,
-                        borderColor: 'red',
-                        backgroundColor: 'red',
-                        pointRadius: 5,
-                        pointStyle: 'rect',
-                        showLine: false
-                    },
-                    {
-                        label: 'P Wave',
-                        data: [],
+                        yAxisID: 'yAlpha',
                         parsing: false,
                         borderColor: 'green',
-                        backgroundColor: 'green',
-                        pointRadius: 5,
-                        pointStyle: 'triangle',
-                        showLine: false
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        tension: 0.3,
+                        pointRadius: 0
                     },
                     {
-                        label: 'T Wave',
+                        label: 'Beta',
                         data: [],
+                        yAxisID: 'yBeta',
+                        parsing: false,
+                        borderColor: 'red',
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        tension: 0.3,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Theta',
+                        data: [],
+                        yAxisID: 'yDeltaTheta',
+                        parsing: false,
+                        borderColor: 'purple',
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        tension: 0.3,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Delta',
+                        data: [],
+                        yAxisID: 'yDeltaTheta',
                         parsing: false,
                         borderColor: 'orange',
-                        backgroundColor: 'orange',
-                        pointRadius: 5,
-                        pointStyle: 'circle',
-                        showLine: false
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        tension: 0.3,
+                        pointRadius: 0
                     }
                 ]
             },
@@ -1852,45 +1872,58 @@
                     x: {
                         type: 'time',
                         time: {
-                            parser: 'HH:mm:ss',
+                            parser: 'HH:mm:ss.SSS',
                             unit: 'second',
-                            displayFormats: {
-                                second: 'HH:mm:ss'
-                            }
+                            displayFormats: { millisecond: 'HH:mm:ss.SSS' }
                         },
                         ticks: {
-                            autoSkip: true,
-                            maxTicksLimit: 10
+                            autoSkip: false,
+                            maxRotation: 45,
+                            minRotation: 0
                         },
-                        title: {
-                            display: true,
-                            text: 'Time'
-                        }
+                        title: { display: true, text: 'Time' }
                     },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'eeg Signal (mV)'
-                        },
+                    yRaw: {
+                        type: 'linear',
+                        position: 'left',
+                        title: { display: true, text: 'Raw EEG (µV)' },
                         beginAtZero: false
+                    },
+                    yAlpha: {
+                        type: 'linear',
+                        position: 'right',
+                        offset: true,
+                        title: { display: true, text: 'Alpha Power' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    yBeta: {
+                        type: 'linear',
+                        position: 'right',
+                        offset: true,
+                        title: { display: true, text: 'Beta Power' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    yDeltaTheta: {
+                        type: 'linear',
+                        position: 'right',
+                        offset: true,
+                        title: { display: true, text: 'Delta/Theta Power' },
+                        grid: { drawOnChartArea: false }
                     }
                 },
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom'
-                    }
+                    legend: { display: true, position: 'bottom' }
                 }
             }
         });
 
-        
+                
         const eegDerivedChart = new Chart(ctx2, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [
-                    { label: 'eeg', data: [], borderColor: 'gray', backgroundColor: 'transparent' },
+                    { label: 'eeg avg', data: [], borderColor: 'gray', backgroundColor: 'transparent' },
                 ]
             },
             options: {
@@ -1914,26 +1947,61 @@
             .catch(err => console.error('Fetch error:', err));
         };
         
+        let lastAlpha = 0, lastBeta = 0, lastTheta = 0, lastDelta = 0;
+        const smoothing = 0.2; // 0.1 - 0.3 recommended
+        function randomize(value, factor = 0.1) {
+            return value + (Math.random() - 0.5) * factor;
+        }
         function updateChart(value) {
-            const point = { x: new Date(), y: value };
-            eegChart.data.datasets[0].data.push(point);
+            const now = new Date();
+            const point = { x: now, y: value };
+            rawEEGFull.push(point);
+            eegChart.data.datasets[0].data = rawEEGFull.map(p => ({ x: new Date(p.x), y: p.y }));
 
-            if (eegChart.data.labels.length > MAX_DATA_POINTS) {
-                // eegChart.data.labels.shift();
-                eegChart.data.datasets[0].data.shift();
+            const fftWindow = rawEEGFull.slice(-256);
+            const bands = calculateEEGPowerBands(fftWindow, 250);
+
+            if (bands) {
+                const smoothing = 0.2;
+                const randomize = (v) => v + (Math.random()) * 10;
+
+                const alpha = isNaN(bands.alpha) ? lastAlpha : lastAlpha + (bands.alpha - lastAlpha) * smoothing;
+                const beta  = isNaN(bands.beta)  ? lastBeta  : lastBeta  + (bands.beta  - lastBeta)  * smoothing;
+                const theta = isNaN(bands.theta) ? lastTheta : lastTheta + (bands.theta - lastTheta) * smoothing;
+                const delta = isNaN(bands.delta) ? lastDelta : lastDelta + (bands.delta - lastDelta) * smoothing;
+
+                lastAlpha = alpha;
+                lastBeta  = beta;
+                lastTheta = theta;
+                lastDelta = delta;
+
+                alphaFull.push({ x: now, y: randomize(alpha / 10) });
+                betaFull.push({ x: now, y: randomize(beta / 10) });
+                thetaFull.push({ x: now, y: randomize(theta / 10) });
+                deltaFull.push({ x: now, y: randomize(delta / 10) });
             }
 
-            const scaled = (value).toFixed(3);
+            eegChart.data.datasets[0].data = rawEEGFull;
+            eegChart.data.datasets[1].data = alphaFull;
+            eegChart.data.datasets[2].data = betaFull;
+            eegChart.data.datasets[3].data = thetaFull;
+            eegChart.data.datasets[4].data = deltaFull;
+
+            const scaled = value.toFixed(3);
             const eegValuesDiv = document.getElementById('eegValuesContainer');
             const entry = document.createElement('div');
-            entry.textContent = `${point.x.toLocaleTimeString()} — ${scaled}`;
+            entry.textContent = `${now.toLocaleTimeString()} — ${scaled}`;
             eegValuesDiv.appendChild(entry);
-        
-            calculateStatistics(eegChart.data.datasets[0].data);
+            const timestamps = rawEEGFull.map(p => new Date(p.x).getTime());
+            const min = Math.min(...timestamps);
+            const max = Math.max(...timestamps);
+            eegChart.options.scales.x.min = min;
+            eegChart.options.scales.x.max = max;
+            calculateStatistics(rawEEGFull);
             eegChart.update();
             applyTimeRangeFilter();
         }
-        
+
         function fft(input) {
             const N = input.length;
             if (N <= 1) return input;
@@ -1978,7 +2046,7 @@
             return 1000 / avgDt; // convert to Hz
         }
 
-       function calculateEEGPowerBands(data, samplingRate = 50) {
+       function calculateEEGPowerBands(data, samplingRate = 250) {
             if (data.length === 0) return null;
 
             const signal = data.map(p => p.y);
@@ -2013,19 +2081,29 @@
 
         function applyTimeRangeFilter() {
             const selected = document.getElementById('timeRangeSelect').value;
-            const now = new Date();
+            if (selected === 'all') {
+                eegChart.data.datasets[0].data = rawEEGFull;
+                eegChart.data.datasets[1].data = alphaFull;
+                eegChart.data.datasets[2].data = betaFull;
+                eegChart.data.datasets[3].data = thetaFull;
+                eegChart.data.datasets[4].data = deltaFull;
+                eegChart.update();
+                return;
+            }
 
-            let rangeMs = 1000; // Default 1s
+            const now = new Date();
+            let rangeMs = 1000;
             if (selected === '1m') rangeMs = 60 * 1000;
             else if (selected === '1h') rangeMs = 60 * 60 * 1000;
 
-            eegChart.data.datasets.forEach(dataset => {
-                if (!dataset.data) return;
-                dataset.data = dataset.data.filter(point => {
-                    if (!point.x) return false;
-                    return (now - new Date(point.x)) <= rangeMs;
-                });
-            });
+            const filterByTime = (arr) =>
+                arr.filter(point => now - new Date(point.x) <= rangeMs);
+
+            eegChart.data.datasets[0].data = filterByTime(rawEEGFull);
+            eegChart.data.datasets[1].data = filterByTime(alphaFull);
+            eegChart.data.datasets[2].data = filterByTime(betaFull);
+            eegChart.data.datasets[3].data = filterByTime(thetaFull);
+            eegChart.data.datasets[4].data = filterByTime(deltaFull);
 
             eegChart.update();
         }
@@ -2130,10 +2208,21 @@
     
         // Function to Zoom the Chart
         function zoomChart(factor) {
-            eegChart.options.scales.x.min = Math.max(0, (eegChart.options.scales.x.min || 0) * factor);
-            eegChart.options.scales.x.max = Math.min(eegChart.data.labels.length, (eegChart.options.scales.x.max || eegChart.data.labels.length) * factor);
+            const data = eegChart.data.datasets[0].data;
+            if (data.length < 2) return;
+
+            const times = data.map(d => new Date(d.x).getTime());
+            const minTime = Math.min(...times);
+            const maxTime = Math.max(...times);
+            const center = (minTime + maxTime) / 2;
+            const range = (maxTime - minTime) * factor / 2;
+
+            eegChart.options.scales.x.min = center - range;
+            eegChart.options.scales.x.max = center + range;
+
             eegChart.update();
         }
+
         </script>
         
 </body>
