@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@latest/dist/full.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body class="bg-base-200 text-base-content min-h-screen">
     <div class="w-full max-w-7xl mx-auto p-3">
@@ -15,15 +16,15 @@
                 <div class="space-y-3">
                     <label class="input input-bordered flex items-center gap-2">
                         Name
-                        <input type="text" class="grow" placeholder="Michael Adi Suryanto" value="Michael Adi Suryanto"/>
+                        <input type="text" class="grow" placeholder="Mohammad Khusnul Khuluq" value="Mohammad Khusnul Khuluq"/>
                     </label>
                     <label class="input input-bordered flex items-center gap-2">
                         Class
-                        <input type="text" class="grow" placeholder="Michael Adi Suryanto" value="D4 Teknik Elektronika B"/>
+                        <input type="text" class="grow" placeholder="D4 Teknik Elektronika B" value="D4 Teknik Elektronika B"/>
                     </label>
                     <label class="input input-bordered flex items-center gap-2">
                         NRP
-                        <input type="text" class="grow" placeholder="Michael Adi Suryanto" value="2121600041"/>
+                        <input type="text" class="grow" placeholder="2121600048" value="2121600048"/>
                     </label>
                 </div>
             </div>
@@ -58,7 +59,7 @@
             <div class="p-4 bg-base-100 rounded-xl">
                 <h1 class="text-xl font-semibold mb-2">Feature Option</h1>
                 <div class="flex gap-3 items-center flex-wrap">
-                    <button class="btn btn-primary text-white" onclick="my_modal_4.showModal()">Sampling</button>
+                    <button class="btn btn-primary text-white hidden" onclick="my_modal_4.showModal()">Sampling</button>
                     <button class="btn btn-primary text-white" onclick="exportChartData()">Export Data</button>
                     <button class="btn btn-primary text-white" onclick="zoomChart(0.5)">Zoom+</button>
                     <button class="btn btn-primary text-white" onclick="zoomChart(2)">Zoom-</button>
@@ -66,6 +67,10 @@
             </div>
             <div class="p-4 bg-base-100 rounded-xl">
                 <h1 class="text-xl font-semibold mb-2">Calculation Data</h1>
+                <div>
+                    <h2 class="text-sm font-bold mb-1">eeg</h2>
+                    <div id="eegValuesContainer" class="h-48 overflow-y-auto bg-base-200 rounded p-2 text-sm border border-base-300"></div>
+                </div>
                 <div class="flex justify-between items-center hidden"><span>Calculate x1</span><span id="x1">0</span></div>
                 <div class="flex justify-between items-center hidden"><span>Calculate x2</span><span id="x2">0</span></div>
                 <div class="flex justify-between items-center hidden"><span>Calculate ΔT y1</span><span id="deltaY1">0</span></div>
@@ -77,13 +82,16 @@
                 <div class="flex justify-between items-center"><span>Amplifier</span><input id="amp_gain" type="number" value="10" readonly class="input input-bordered input-sm w-24"/></div>
                 <div class="flex justify-between items-center"><span>Frequency after amp (Hz)</span><span id="freq_amp">0</span></div>
 
-                <div class="flex justify-between items-center hidden"><span>Average</span><span id="avg">0</span></div>
-                <div class="flex justify-between items-center hidden"><span>Peak to Peak</span><span id="ptp">0</span></div>
-                <div class="flex justify-between items-center hidden"><span>Parameter A</span><span id="paramA">-</span></div>
-                <div class="flex justify-between items-center hidden"><span>Parameter B</span><span id="paramB">-</span></div>
-                <div class="flex justify-between items-center hidden"><span>EEG Class</span><span id="eegClass">-</span></div>
+                <div class="flex justify-between items-center"><span>Average</span><span id="avg">0</span></div>
+                <div class="flex justify-between items-center"><span>Peak to Peak</span><span id="ptp">0</span></div>
+                <div class="flex justify-between items-center"><span>EEG Class</span><span id="eegClass">-</span></div>
             </div>
-            <div class="p-4 bg-base-100 rounded-xl">
+            <select id="timeRangeSelect" class="select select-bordered w-full mt-2">
+                <option value="1s">Last 1 Second</option>
+                <option value="1m">Last 1 Minute</option>
+                <option value="1h">Last 1 Hour</option>
+            </select>
+            <div class="p-4 bg-base-100 rounded-xl hidden">
                 <h1 class="text-xl font-semibold mb-2">Formulation</h1>
                 <div>
                     <div>
@@ -134,341 +142,353 @@
             </div>
         </dialog>
     </div>
+    <script>
+        const MAX_DATA_POINTS = 300;
+        const ctx = document.getElementById('eegChart').getContext('2d');
+        const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
+        
+        let eegData = [];
+        let freqList = [];
+        let stdList = [];
+        let stdCategoryList = [];
+        let freqAfterAmpList = [];
 
-<script>
-const MAX_DATA_POINTS = 50;
-const channelKeys = ['ch1', 'ch2', 'ch3', 'ch4'];
-const colors = ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 206, 86)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'];
-
-const ctx = document.getElementById('eegChart').getContext('2d');
-const portSelect = document.getElementById('port-select');
-const baudrateSelect = document.getElementById('baudrate-select');
-const connectBtn = document.getElementById('connect-btn');
-let stdCategory = '';
-let freqAfterAmp = 0
-let std = 0
-let avg = 0
-let estimatedFrequency = 0
-
-const freqList = [];
-const freqAmpList = [];
-const stdList = [];
-const stdCategoryList = [];
-
-function updateStats() {
-    const ch1 = eegChart.data.datasets[0].data;
-    if (ch1.length < 2) return;
-  
-    const samplingInterval = 0.2;
-    const samplingRate = 1 / samplingInterval;
-
-    const x1 = ch1[0];
-    const x2 = ch1[ch1.length - 1];
-    const deltaY1 = x2 - x1;
-    const deltaY2 = Math.abs(x2 - x1);
-  
-    avg = ch1.reduce((sum, val) => sum + val, 0) / ch1.length;
-    std = Math.sqrt(ch1.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / ch1.length);
-    const ptp = Math.max(...ch1) - Math.min(...ch1);
-
-    let zeroCrossings = 0;
-    for (let i = 1; i < ch1.length; i++) {
-        if ((ch1[i - 1] < avg && ch1[i] > avg) || (ch1[i - 1] > avg && ch1[i] < avg)) {
-            zeroCrossings++;
-        }
-    }
-    estimatedFrequency = (zeroCrossings / 2) * (samplingRate / ch1.length); 
-    const ampValue = parseFloat(document.getElementById("amp_gain").value) || 1;
-    freqAfterAmp = estimatedFrequency * ampValue;
-    document.getElementById("freq_amp").innerText = freqAfterAmp.toFixed(2);
-
-    if (std < 2) stdCategory = 'Delta';
-    else if (std < 4) stdCategory = 'Theta';
-    else if (std < 6) stdCategory = 'Alpha';
-    else stdCategory = 'Beta';
-  
-    document.getElementById('x1').innerText = x1.toFixed(2);
-    document.getElementById('x2').innerText = x2.toFixed(2);
-    document.getElementById('deltaY1').innerText = deltaY1.toFixed(2);
-    document.getElementById('deltaY2').innerText = deltaY2.toFixed(2);
-    document.getElementById('avg').innerText = avg.toFixed(2);
-    document.getElementById('std').innerText = std.toFixed(2);
-    document.getElementById('ptp').innerText = ptp.toFixed(2);
-    document.getElementById('std_c').innerText = stdCategory;
-    document.getElementById('freq').innerText = estimatedFrequency.toFixed(2);
-
-    freqList.push(estimatedFrequency.toFixed(2));
-    freqAmpList.push(freqAfterAmp.toFixed(2));
-    stdList.push(std.toFixed(2));
-    stdCategoryList.push(stdCategory);
-
-    const paramA = (ptp > 10) ? 'Abnormal' : 'Normal';
-    const paramB = (std > 5) ? 'High Variance' : 'Stable';
-    const eegClass = (avg > 0) ? 'Active' : 'Relaxed';
-  
-    document.getElementById('paramA').innerText = paramA;
-    document.getElementById('paramB').innerText = paramB;
-    document.getElementById('eegClass').innerText = eegClass;
-}
-  
-
-fetch('/api/serial/ports')
-    .then(res => res.json())
-    .then(data => {
-        data.ports.forEach(port => {
-        const option = document.createElement('option');
-        option.text = port;
-        option.value = port;
-        portSelect.appendChild(option);
-    });
-});
-
-connectBtn.addEventListener('click', () => {
-    const selectedPort = portSelect.value;
-    const selectedBaud = baudrateSelect.value;
-    fetch('/api/serial/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ port: selectedPort, baudrate: selectedBaud })
-    })
-    .then(res => res.json())
-    .then(result => {
-        if (result.status === "connected") {
-            alert("Connected to " + selectedPort + " at " + selectedBaud + " baud");
-        } else {
-            alert("Failed: " + result.message);
-        }
-    });
-});
-
-const samplingCtx = document.getElementById('samplingChart').getContext('2d');
-const samplingChart = new Chart(samplingCtx, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'CH1 Sample',
-            data: [],
-            borderColor: 'teal',
-            borderWidth: 2,
-            backgroundColor: 'transparent',
-            tension: 0.3
-        }]
-    },
-    options: {
-        responsive: true,
-        animation: false,
-        scales: {
-            y: { beginAtZero: false }
-        }
-    }
-});
-
-function updateSamplingChart() {
-    const ch1Data = eegChart.data.datasets[0].data;
-    const timeLabels = eegChart.data.labels;
-
-    samplingChart.data.labels = [...timeLabels];
-    samplingChart.data.datasets[0].data = [...ch1Data];
-
-    document.getElementById('samplingPoints').innerText = ch1Data.length;
-
-    const avg = ch1Data.reduce((a, b) => a + b, 0) / ch1Data.length;
-    let zeroCrossings = 0;
-    for (let i = 1; i < ch1Data.length; i++) {
-        if ((ch1Data[i - 1] < avg && ch1Data[i] > avg) || (ch1Data[i - 1] > avg && ch1Data[i] < avg)) {
-            zeroCrossings++;
-        }
-    }
-
-    const samplingInterval = 0.2; 
-    const samplingRate = 1 / samplingInterval;
-    const estimatedFreq = (zeroCrossings / 2) * (samplingRate / ch1Data.length);
-    document.getElementById('samplingFreq').innerText = estimatedFreq.toFixed(2);
-
-    samplingChart.update();
-}
-
-function calculateBandPowers(chData) {
-    const avg = chData.reduce((a, b) => a + b, 0) / chData.length;
-    const alpha = avg * 0.5 + Math.random() * 0.5;
-    const beta = avg * 0.3 + Math.random() * 0.5;
-    const delta = avg * 0.2 + Math.random() * 0.3;
-    const theta = avg * 0.1 + Math.random() * 0.2;
-    return { avg, alpha, beta, delta, theta };
-}
-
-document.querySelector('[onclick="my_modal_4.showModal()"]').addEventListener('click', () => {
-    updateSamplingChart();
-});
-
-const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
-const eegDerivedChart = new Chart(ctx2, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [
-      { label: 'Average', data: [], borderColor: 'gray', borderWidth: 2, backgroundColor: 'transparent' },
-      { label: 'Alpha', data: [], borderColor: 'green', borderWidth: 2, backgroundColor: 'transparent' },
-      { label: 'Beta', data: [], borderColor: 'blue', borderWidth: 2, backgroundColor: 'transparent' },
-      { label: 'Delta', data: [], borderColor: 'purple', borderWidth: 2, backgroundColor: 'transparent' },
-      { label: 'Theta', data: [], borderColor: 'orange', borderWidth: 2, backgroundColor: 'transparent' },
-    ]
-  },
-  options: {
-    responsive: true,
-    animation: false,
-    scales: {
-      y: { beginAtZero: false }
-    }
-  }
-});
-
-const eegChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-    labels: [],
-    datasets: channelKeys.map((key, index) => ({
-        label: key.toUpperCase(),
-        datasets: [],
-        borderColor: colors[index],
-        backgroundColor: 'transparent',
-        tension: 0.3,
-    }))
-    },
-    options: {
-    responsive: true,
-    animation: false,
-    scales: {
-        y: { beginAtZero: false }
-    }
-    }
-});
-
-const updateChart = (data) => {
-    const time = new Date().toLocaleTimeString();
-    eegChart.data.labels.push(time);
-
-    eegChart.data.datasets.forEach((dataset, index) => {
-    dataset.data.push(data[channelKeys[index]]);
-    if (dataset.data.length > MAX_DATA_POINTS) {
-        dataset.data.shift();
-    }
-    });
-
-    if (eegChart.data.labels.length > MAX_DATA_POINTS) {
-    eegChart.data.labels.shift();
-    }
-
-    if (eegChart.data.labels.length > MAX_DATA_POINTS) {
-        eegChart.data.labels.shift();
-      }
-    
-    const ch1Data = eegChart.data.datasets[0].data;
-    if (ch1Data.length > 0) {
-        const { avg, alpha, beta, delta, theta } = calculateBandPowers(ch1Data);
-    
-        const derivedData = [avg, alpha, beta, delta, theta];
-        eegDerivedChart.data.labels.push(time);
-    
-        eegDerivedChart.data.datasets.forEach((dataset, idx) => {
-            dataset.data.push(derivedData[idx]);
-            if (dataset.data.length > MAX_DATA_POINTS) {
-                dataset.data.shift();
+        const eegChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'eeg Data',
+                        data: [],
+                        parsing: false, // Enable x/y object-based data
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 0 // Hide points for smoother eeg line
+                    },
+                    {
+                        label: 'QRS Complex',
+                        data: [],
+                        parsing: false,
+                        borderColor: 'red',
+                        backgroundColor: 'red',
+                        pointRadius: 5,
+                        pointStyle: 'rect',
+                        showLine: false
+                    },
+                    {
+                        label: 'P Wave',
+                        data: [],
+                        parsing: false,
+                        borderColor: 'green',
+                        backgroundColor: 'green',
+                        pointRadius: 5,
+                        pointStyle: 'triangle',
+                        showLine: false
+                    },
+                    {
+                        label: 'T Wave',
+                        data: [],
+                        parsing: false,
+                        borderColor: 'orange',
+                        backgroundColor: 'orange',
+                        pointRadius: 5,
+                        pointStyle: 'circle',
+                        showLine: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            parser: 'HH:mm:ss',
+                            unit: 'second',
+                            displayFormats: {
+                                second: 'HH:mm:ss'
+                            }
+                        },
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'eeg Signal (mV)'
+                        },
+                        beginAtZero: false
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom'
+                    }
+                }
             }
         });
+
+        
+        const eegDerivedChart = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'eeg', data: [], borderColor: 'gray', backgroundColor: 'transparent' },
+                ]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    y: { beginAtZero: false },
+                    x: { display: false }
+                }
+            }
+        });
+        
+        const fetchData = () => {
+            fetch('/api/data')
+            .then(response => response.json())
+            .then(data => {
+                if (data.eeg !== undefined) {
+                    updateChart(data.eeg);
+                }
+            })
+            .catch(err => console.error('Fetch error:', err));
+        };
+        
+        function updateChart(value) {
+            const point = { x: new Date(), y: value };
+            eegChart.data.datasets[0].data.push(point);
+
+            if (eegChart.data.labels.length > MAX_DATA_POINTS) {
+                // eegChart.data.labels.shift();
+                eegChart.data.datasets[0].data.shift();
+            }
+
+            const scaled = (value).toFixed(3);
+            const eegValuesDiv = document.getElementById('eegValuesContainer');
+            const entry = document.createElement('div');
+            entry.textContent = `${point.x.toLocaleTimeString()} — ${scaled}`;
+            eegValuesDiv.appendChild(entry);
+        
+            calculateStatistics(eegChart.data.datasets[0].data);
+            eegChart.update();
+            applyTimeRangeFilter();
+        }
+        
+        function fft(input) {
+            const N = input.length;
+            if (N <= 1) return input;
+
+            const even = fft(input.filter((_, i) => i % 2 === 0));
+            const odd = fft(input.filter((_, i) => i % 2 === 1));
+
+            const output = new Array(N).fill(0).map(() => ({ re: 0, im: 0 }));
+            for (let k = 0; k < N / 2; k++) {
+                const t = {
+                    re: Math.cos(-2 * Math.PI * k / N),
+                    im: Math.sin(-2 * Math.PI * k / N)
+                };
+
+                const oddK = odd[k];
+                const twiddle = {
+                    re: t.re * oddK.re - t.im * oddK.im,
+                    im: t.re * oddK.im + t.im * oddK.re
+                };
+
+                output[k] = {
+                    re: even[k].re + twiddle.re,
+                    im: even[k].im + twiddle.im
+                };
+                output[k + N / 2] = {
+                    re: even[k].re - twiddle.re,
+                    im: even[k].im - twiddle.im
+                };
+            }
+            return output;
+        }
+
+        function estimateSamplingRate(data) {
+            if (data.length < 2) return 0;
+            let totalDiff = 0;
+            for (let i = 1; i < data.length; i++) {
+                const t1 = new Date(data[i].x).getTime();
+                const t0 = new Date(data[i - 1].x).getTime();
+                totalDiff += (t1 - t0);
+            }
+            const avgDt = totalDiff / (data.length - 1); // in ms
+            return 1000 / avgDt; // convert to Hz
+        }
+
+       function calculateEEGPowerBands(data, samplingRate = 50) {
+            if (data.length === 0) return null;
+
+            const signal = data.map(p => p.y);
+            const fftSize = Math.pow(2, Math.floor(Math.log2(signal.length))); // power of 2
+            const inputComplex = signal.slice(0, fftSize).map(v => ({ re: v, im: 0 }));
+
+            const spectrum = fft(inputComplex);
+
+            const magnitudes = spectrum.slice(0, fftSize / 2).map(c =>
+                Math.sqrt(c.re ** 2 + c.im ** 2)
+            );
+
+            const freqRes = samplingRate / fftSize;
+
+            const power = (fStart, fEnd) => {
+                const startBin = Math.floor(fStart / freqRes);
+                const endBin = Math.ceil(fEnd / freqRes);
+                let sum = 0;
+                for (let i = startBin; i <= endBin; i++) {
+                    sum += magnitudes[i] ** 2;
+                }
+                return sum;
+            };
+
+            return {
+                delta: power(0.5, 4),
+                theta: power(4, 8),
+                alpha: power(8, 13),
+                beta: power(13, 30)
+            };
+        }
+
+        function applyTimeRangeFilter() {
+            const selected = document.getElementById('timeRangeSelect').value;
+            const now = new Date();
+
+            let rangeMs = 1000; // Default 1s
+            if (selected === '1m') rangeMs = 60 * 1000;
+            else if (selected === '1h') rangeMs = 60 * 60 * 1000;
+
+            eegChart.data.datasets.forEach(dataset => {
+                if (!dataset.data) return;
+                dataset.data = dataset.data.filter(point => {
+                    if (!point.x) return false;
+                    return (now - new Date(point.x)) <= rangeMs;
+                });
+            });
+
+            eegChart.update();
+        }
+
+        document.getElementById('timeRangeSelect').addEventListener('change', applyTimeRangeFilter);
+        
+        function calculateStatistics(data) {
+            const avg = data.reduce((sum, point) => sum + point.y, 0) / data.length;
+            const x1 = data[0]?.x ? new Date(data[0].x).getTime() : 0;
+            const x2 = data[data.length - 1]?.x ? new Date(data[data.length - 1].x).getTime() : 0;
+            const std = Math.sqrt(data.reduce((sum, point) => sum + Math.pow(point.y - avg, 2), 0) / data.length);
+            const ptp = Math.max(...data.map(p => p.y)) - Math.min(...data.map(p => p.y));
+            const y1 = data[0]?.y || 0;
+            const y2 = data[data.length - 1]?.y || 0;
+            const deltaY1 = Math.abs(y1 - avg);
+            const deltaY2 = Math.abs(y2 - avg);
+            const zeroCrossings = data.reduce((count, val, i, arr) => {
+                return (i > 0 && ((arr[i - 1] < avg && val >= avg) || (arr[i - 1] > avg && val <= avg))) ? count + 1 : count;
+            }, 0);
+            const bands = calculateEEGPowerBands(data);
+            let eegClass = '-';
+            if (bands) {
+                const { delta, theta, alpha, beta } = bands;
+                const maxBand = Math.max(delta, theta, alpha, beta);
+                if (maxBand === delta) eegClass = 'Delta';
+                else if (maxBand === theta) eegClass = 'Theta';
+                else if (maxBand === alpha) eegClass = 'Alpha';
+                else if (maxBand === beta) eegClass = 'Beta';
+            }
+            document.getElementById('eegClass').innerText = eegClass;
+            const samplingRate = estimateSamplingRate(data);
+            const estimatedFrequency = (zeroCrossings / 2) * (samplingRate / data.length);
+            const freqAfterAmp = estimatedFrequency * parseFloat(document.getElementById("amp_gain").value) || 1;
+            
+            // Classification Based on Standard Deviation
+            let stdCategory = '';
+            if (std < 2) stdCategory = 'Delta';
+            else if (std < 4) stdCategory = 'Theta';
+            else if (std < 6) stdCategory = 'Alpha';
+            else stdCategory = 'Beta';
+        
+            // Update Derived Chart
+            eegDerivedChart.data.labels.push(new Date().toLocaleTimeString());
+            eegDerivedChart.data.datasets[0].data.push(avg);
+        
+            if (eegDerivedChart.data.labels.length > MAX_DATA_POINTS) {
+                eegDerivedChart.data.labels.shift();
+                eegDerivedChart.data.datasets.forEach(dataset => dataset.data.shift());
+            }
+        
+            eegDerivedChart.update();
+        
+            document.getElementById('std').innerText = std.toFixed(3);
+            document.getElementById('std_c').innerText = stdCategory;
+            document.getElementById('freq').innerText = samplingRate.toFixed(3);
+            document.getElementById('freq_amp').innerText = samplingRate.toFixed(3);
+            document.getElementById('avg').innerText = avg.toFixed(3);
+            document.getElementById('ptp').innerText = ptp.toFixed(3);
+            document.getElementById('x1').innerText = x1 ? new Date(x1).toLocaleTimeString() : '0';
+            document.getElementById('x2').innerText = x2 ? new Date(x2).toLocaleTimeString() : '0';
+            document.getElementById('deltaY1').innerText = deltaY1.toFixed(3);
+            document.getElementById('deltaY2').innerText = deltaY2.toFixed(3);
+            // Storing Values for History
+            freqList.push(estimatedFrequency.toFixed(3));
+            freqAfterAmpList.push(freqAfterAmp.toFixed(3));
+            stdList.push(std.toFixed(3));
+            stdCategoryList.push(stdCategory);
+        }
+        
+        // Start Fetching Data Automatically
+        setInterval(fetchData, 200);
+
+        function exportChartData() {
+            const headers = [
+                'Timestamp', 
+                'eeg Value', 
+                'Frequency (Hz)', 
+                'Frequency After Amp (Hz)', 
+                'Std Deviation', 
+                'Std Category'
+            ];
+            
+            const rows = eegChart.data.labels.map((label, i) => {
+                return [
+                    label,
+                    eegChart.data.datasets[0].data[i] || '',
+                    freqList[i] || '',
+                    freqAfterAmpList[i] || '',
+                    stdList[i] || '',
+                    stdCategoryList[i] || ''
+                ];
+            });
     
-        if (eegDerivedChart.data.labels.length > MAX_DATA_POINTS) {
-            eegDerivedChart.data.labels.shift();
+            const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'eeg_data_export.csv';
+            link.click();
         }
     
-        eegDerivedChart.update();
-    }
-    
-
-    eegChart.update();
-    updateStats();
-};
-
-const fetchData = () => {
-    fetch('/api/data')
-    .then(response => response.json())
-    .then(data => {
-        console.log(data);
-        updateChart(data);
-    })
-    .catch(err => console.error('Fetch error:', err));
-};
-
-function exportChartData() {
-    const headers = [
-        'Timestamp',
-        ...eegChart.data.datasets.map(d => d.label),
-        'Frequency (Hz)',
-        'Frequency after Amp (Hz)',
-        'Std Deviation',
-        'Std Category',
-        'Alpha',
-        'Beta',
-        'Theta',
-        'Delta',
-        'Average',
-    ];
-
-    const rows = eegChart.data.labels.map((label, i) => {
-        const row = [label];
-
-        // CH1 - CH4
-        eegChart.data.datasets.forEach(dataset => {
-            row.push(dataset.data[i] !== undefined ? dataset.data[i] : '');
-        });
-
-        // Ambil historis
-        const alpha = eegDerivedChart.data.datasets[1].data[i] || 0;
-        const beta = eegDerivedChart.data.datasets[2].data[i] || 0;
-        const delta = eegDerivedChart.data.datasets[3].data[i] || 0;
-        const theta = eegDerivedChart.data.datasets[4].data[i] || 0;
-        const avg = eegDerivedChart.data.datasets[0].data[i] || 0;
-
-        const freq = freqList[i] || 0;
-        const freqAmp = freqAmpList[i] || 0;
-        const stdVal = stdList[i] || 0;
-        const stdCat = stdCategoryList[i] || '-';
-
-        row.push(freq, freqAmp, stdVal, stdCat, alpha.toFixed(2), beta.toFixed(2), theta.toFixed(2), delta.toFixed(2), avg.toFixed(2));
-        return row;
-    });
-
-    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
-    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const csvLink = document.createElement('a');
-    csvLink.href = URL.createObjectURL(csvBlob);
-    csvLink.download = 'eeg_data_export.csv';
-    csvLink.click();
-}
-
-function zoomChart(factor) {
-    const applyZoom = (chart) => {
-        const range = chart.options.scales.x.min !== undefined
-            ? chart.options.scales.x.max - chart.options.scales.x.min
-            : MAX_DATA_POINTS;
-
-        chart.options.scales.x.min = chart.options.scales.x.min || 0;
-        chart.options.scales.x.max = chart.options.scales.x.max || chart.data.labels.length;
-        const center = (chart.options.scales.x.min + chart.options.scales.x.max) / 2;
-        const newRange = range * factor;        
-
-        chart.options.scales.x.min = Math.max(0, center - newRange / 2);
-        chart.options.scales.x.max = center + newRange / 2;
-        chart.update();
-    };
-
-    applyZoom(eegChart);
-    applyZoom(eegDerivedChart);
-}
-
-
-setInterval(fetchData, 200);
-</script>
+        // Function to Zoom the Chart
+        function zoomChart(factor) {
+            eegChart.options.scales.x.min = Math.max(0, (eegChart.options.scales.x.min || 0) * factor);
+            eegChart.options.scales.x.max = Math.min(eegChart.data.labels.length, (eegChart.options.scales.x.max || eegChart.data.labels.length) * factor);
+            eegChart.update();
+        }
+        </script>
+        
 </body>
 </html>
