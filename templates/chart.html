@@ -76,11 +76,11 @@
                 <div class="flex justify-between items-center hidden"><span>Calculate ΔT y1</span><span id="deltaY1">0</span></div>
                 <div class="flex justify-between items-center hidden"><span>Calculate ΔT y2</span><span id="deltaY2">0</span></div>
                 <div class="flex justify-between items-center"><span>Std deviation</span><span id="std">0</span></div>
-                <div class="flex justify-between items-center"><span>Std category</span><span id="std_c">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Std category</span><span id="std_c">0</span></div>
 
                 <div class="flex justify-between items-center"><span>Frequency (Hz)</span><span id="freq">0</span></div>
-                <div class="flex justify-between items-center"><span>Amplifier</span><input id="amp_gain" type="number" value="10" readonly class="input input-bordered input-sm w-24"/></div>
-                <div class="flex justify-between items-center"><span>Frequency after amp (Hz)</span><span id="freq_amp">0</span></div>
+                <div class="flex justify-between items-center hidden"><span>Amplifier</span><input id="amp_gain" type="number" value="10" readonly class="input input-bordered input-sm w-24"/></div>
+                <div class="flex justify-between items-center hidden"><span>Frequency after amp (Hz)</span><span id="freq_amp">0</span></div>
 
                 <div class="flex justify-between items-center"><span>Average</span><span id="avg">0</span></div>
                 <div class="flex justify-between items-center"><span>Peak to Peak</span><span id="ptp">0</span></div>
@@ -144,7 +144,7 @@
         </dialog>
     </div>
     <script>
-        const MAX_DATA_POINTS = 60;
+        const MAX_DATA_POINTS = 250;
         const ctx = document.getElementById('eegChart').getContext('2d');
         const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
         
@@ -1958,13 +1958,12 @@
             rawEEGFull.push(point);
             eegChart.data.datasets[0].data = rawEEGFull.map(p => ({ x: new Date(p.x), y: p.y }));
 
-            const fftWindow = rawEEGFull.slice(-256);
-            const bands = calculateEEGPowerBands(fftWindow, 250);
+            const fftWindow = rawEEGFull.slice(-MAX_DATA_POINTS);
+            const bands = calculateEEGPowerBands(fftWindow, 50);
             console.log("FFT Window size:", fftWindow.length);
 
             if (bands) {
                 const smoothing = 0.2;
-                const randomize = (v) => v + (Math.random()) * 10;
 
                 const alpha = isNaN(bands.alpha) ? lastAlpha : lastAlpha + (bands.alpha - lastAlpha) * smoothing;
                 const beta  = isNaN(bands.beta)  ? lastBeta  : lastBeta  + (bands.beta  - lastBeta)  * smoothing;
@@ -2142,18 +2141,21 @@
                 else if (maxBand === alpha) eegClass = 'Alpha';
                 else if (maxBand === beta) eegClass = 'Beta';
             }
-            document.getElementById('eegClass').innerText = eegClass;
+            
             const samplingRate = estimateSamplingRate(data);
             const estimatedFrequency = (zeroCrossings / 2) * (samplingRate / data.length);
             const freqAfterAmp = estimatedFrequency * parseFloat(document.getElementById("amp_gain").value) || 1;
             
-            // Classification Based on Standard Deviation
             let stdCategory = '';
-            if (std < 2) stdCategory = 'Delta';
-            else if (std < 4) stdCategory = 'Theta';
-            else if (std < 6) stdCategory = 'Alpha';
+            if (samplingRate < 2) stdCategory = 'Delta';
+            else if (samplingRate < 4) stdCategory = 'Theta';
+            else if (samplingRate < 5) stdCategory = 'Alpha';
             else stdCategory = 'Beta';
-        
+            if (data.length < MAX_DATA_POINTS) {
+                document.getElementById('eegClass').innerHTML = `<span class="badge bg-blue-600 text-white">Loading</span>`;
+            } else {
+                document.getElementById('eegClass').innerText = stdCategory;
+            }
             // Update Derived Chart
             eegDerivedChart.data.labels.push(new Date().toLocaleTimeString());
             eegDerivedChart.data.datasets[0].data.push(avg);
@@ -2162,8 +2164,6 @@
                 eegDerivedChart.data.labels.shift();
                 eegDerivedChart.data.datasets.forEach(dataset => dataset.data.shift());
             }
-        
-            eegDerivedChart.update();
         
             document.getElementById('std').innerText = std.toFixed(3);
             document.getElementById('std_c').innerText = stdCategory;
