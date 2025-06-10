@@ -144,7 +144,7 @@
         </dialog>
     </div>
     <script>
-        const MAX_DATA_POINTS = 300;
+        const MAX_DATA_POINTS = 60;
         const ctx = document.getElementById('eegChart').getContext('2d');
         const ctx2 = document.getElementById('eegDerivedChart').getContext('2d');
         
@@ -1960,6 +1960,7 @@
 
             const fftWindow = rawEEGFull.slice(-256);
             const bands = calculateEEGPowerBands(fftWindow, 250);
+            console.log("FFT Window size:", fftWindow.length);
 
             if (bands) {
                 const smoothing = 0.2;
@@ -1975,10 +1976,10 @@
                 lastTheta = theta;
                 lastDelta = delta;
 
-                alphaFull.push({ x: now, y: randomize(alpha / 10) });
-                betaFull.push({ x: now, y: randomize(beta / 10) });
-                thetaFull.push({ x: now, y: randomize(theta / 10) });
-                deltaFull.push({ x: now, y: randomize(delta / 10) });
+                alphaFull.push({ x: now, y: alpha });
+                betaFull.push({ x: now, y: beta });
+                thetaFull.push({ x: now, y: theta });
+                deltaFull.push({ x: now, y: delta });
             }
 
             eegChart.data.datasets[0].data = rawEEGFull;
@@ -1997,6 +1998,14 @@
             const max = Math.max(...timestamps);
             eegChart.options.scales.x.min = min;
             eegChart.options.scales.x.max = max;
+            if (rawEEGFull.length > MAX_DATA_POINTS) {
+                rawEEGFull.shift();
+                alphaFull.shift();
+                betaFull.shift();
+                thetaFull.shift();
+                deltaFull.shift();
+            }
+
             calculateStatistics(rawEEGFull);
             eegChart.update();
             applyTimeRangeFilter();
